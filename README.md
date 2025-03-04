@@ -47,11 +47,20 @@ contest_directory/
   │           └── ...
   └── problems/
         ├── problem1/
-        │     ├── input1.txt
-        │     ├── output1.txt
-        │     ├── input2.txt
-        │     └── output2.txt
+        │     ├── test01/
+        │     │     ├── problem1.INP
+        │     │     └── problem1.OUT
+        │     ├── test02/
+        │     │     ├── problem1.INP
+        │     │     └── problem1.OUT
+        │     └── ...
         └── problem2/
+              ├── test01/
+              │     ├── problem2.INP
+              │     └── problem2.OUT
+              ├── test02/
+              │     ├── problem2.INP
+              │     └── problem2.OUT
               └── ...
 ```
 
