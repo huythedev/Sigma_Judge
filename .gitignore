@@ -1,0 +1,5 @@
+/resources/settings.json
+/app/core/__pycache__/
+/app/models/__pycache__/
+/app/ui/__pycache__/
+/app/ui/components/__pycache__/
