@@ -11,6 +11,16 @@ A Python GUI application that automatically tests contestant solutions against p
 
 ## Installation
 
+### Option 1: Download Pre-built Executable (Only for Windows)
+
+1. Download the latest executable from the [Releases Page](https://github.com/huythedev/Sigma_Judge/releases/latest)
+2. Extract the ZIP file if applicable
+3. Run the executable file
+
+No Python installation or technical knowledge required!
+
+### Option 2: Install from Source (For developers)
+
 1. Clone this repository:
 ```bash
 git clone https://github.com/huythedev/Sigma_Judge.git
@@ -22,13 +32,14 @@ cd Sigma_Judge
 pip install -r requirements.txt
 ```
 
-## Usage
-
-1. Run the application:
+3. Run the application:
 ```bash
 python run.py
 ```
 
+## Usage
+
+1. Run the application
 2. Click "Load Data" to select a contest directory
 3. Configure settings if needed
 4. Click "Evaluate All" to start testing
