@@ -163,7 +163,7 @@ class Evaluator:
                     capture_output=True, text=True
                 )
             elif ext == '.cpp':
-                compile_cmd = ['g++', solution_path, '-o', executable_path]
+                compile_cmd = ['g++', '-std=c++20', solution_path, '-o', executable_path]
                 if platform.system() != 'Windows':
                     compile_cmd.append('-lm')
                 
