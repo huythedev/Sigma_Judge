@@ -3,3 +3,9 @@
 /app/models/__pycache__/
 /app/ui/__pycache__/
 /app/ui/components/__pycache__/
+/releases/
+/app/__pycache__/
+/app/utils/__pycache__/
+/app/core/modules/__pycache__
+/build/
+/tools/

@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QMessageBox,
-                           QTabWidget, QFileDialog, QPushButton)  # Add QPushButton
-from PyQt6.QtCore import Qt, pyqtSlot, QTimer
-from PyQt6.QtGui import QIcon  # Add QIcon for button icon
+                           QTabWidget, QFileDialog, QPushButton, QMenu, QMenuBar)
+from PyQt6.QtCore import Qt, pyqtSlot, QTimer  # Ensure QTimer is imported
+from PyQt6.QtGui import QIcon, QAction
 
 import os
 import pandas as pd  # Add pandas import at the top
@@ -19,6 +19,10 @@ from app.ui.debug_panel import DebugPanel
 from app.ui.components.evaluation_toolbar import EvaluationToolbar
 from app.ui.components.directory_browser import DirectoryBrowser
 from app.ui.progress_panel import ProgressPanel
+
+import sys
+from app.utils.platform_utils import get_platform
+from app.core.rejudge_thread import RejudgeThread
 
 class MainWindow(QMainWindow):
     def __init__(self, settings: Settings):
@@ -54,7 +58,8 @@ class MainWindow(QMainWindow):
         self.progress_panel = ProgressPanel()
         self.tab_widget.addTab(self.progress_panel, "Progress")
         
-        self.settings_panel = SettingsPanel(self.settings)
+        # Create settings panel with reference to main window
+        self.settings_panel = SettingsPanel(self.settings, self)
         self.tab_widget.addTab(self.settings_panel, "Settings")
         self.debug_panel = DebugPanel()
         self.tab_widget.addTab(self.debug_panel, "Debug")
@@ -66,11 +71,32 @@ class MainWindow(QMainWindow):
         
         self.setCentralWidget(central_widget)
         
-        # Set initial directories if available
-        if self.settings.last_directory:
+        # Set initial directories if available - Improve the logic here
+        if self.settings.last_directory and os.path.isdir(self.settings.last_directory):
             base_dir = self.settings.last_directory
-            self.dir_browser.contestants_dir_edit.setText(os.path.join(base_dir, "contestants"))
-            self.dir_browser.problems_dir_edit.setText(os.path.join(base_dir, "problems"))
+            print(f"Setting initial directories from: {base_dir}")
+            
+            # Only set if these directories actually exist
+            contestants_dir = os.path.join(base_dir, "contestants")
+            problems_dir = os.path.join(base_dir, "problems")
+            
+            if os.path.isdir(contestants_dir):
+                self.dir_browser.contestants_dir_edit.setText(contestants_dir)
+                print(f"Set contestants directory: {contestants_dir}")
+            else:
+                # Use base directory as fallback
+                self.dir_browser.contestants_dir_edit.setText(base_dir)
+                print(f"Contestants subdirectory not found, using: {base_dir}")
+            
+            if os.path.isdir(problems_dir):
+                self.dir_browser.problems_dir_edit.setText(problems_dir)
+                print(f"Set problems directory: {problems_dir}")
+            else:
+                # Use base directory as fallback
+                self.dir_browser.problems_dir_edit.setText(base_dir)
+                print(f"Problems subdirectory not found, using: {base_dir}")
+        else:
+            print(f"No valid last directory in settings: {self.settings.last_directory}")
         
         # Add Export button to toolbar
         self.eval_toolbar.export_button = QPushButton("Export Results")
@@ -78,11 +104,46 @@ class MainWindow(QMainWindow):
         self.eval_toolbar.export_button.setEnabled(False)
         self.eval_toolbar.export_button.clicked.connect(self.export_results)
         self.eval_toolbar.layout().insertWidget(2, self.eval_toolbar.export_button)
+        
+        # Configure window based on platform
+        self.setup_platform_specifics()
+        
+        # Make settings panel refresh when selected
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+    
+    def setup_platform_specifics(self):
+        """Setup platform-specific configurations"""
+        platform = get_platform()
+        
+        if platform == 'mac':
+            # Mac-specific menu setup - using PyQt methods, not tkinter
+            menubar = self.menuBar()
+            app_menu = menubar.addMenu('Sigma Judge')
+            about_action = QAction('About', self)
+            app_menu.addAction(about_action)
+            
+            # Add separator
+            app_menu.addSeparator()
+            
+            # Add quit action
+            quit_action = QAction('Quit', self)
+            quit_action.triggered.connect(self.close)
+            app_menu.addAction(quit_action)
+            
+        elif platform == 'windows':
+            # Windows-specific settings
+            try:
+                icon_path = self.resource_path("icon.ico")
+                if os.path.exists(icon_path):
+                    self.setWindowIcon(QIcon(icon_path))
+            except Exception as e:
+                print(f"Could not set window icon: {e}")
     
     def connect_signals(self):
         """Connect all UI signals"""
         # Directory browser signals
         self.dir_browser.load_button.clicked.connect(self.load_data)
+        self.dir_browser.directories_changed.connect(self.update_directory_settings)
         
         # Evaluation toolbar signals
         self.eval_toolbar.evaluate_button.clicked.connect(self.start_evaluation)
@@ -91,6 +152,14 @@ class MainWindow(QMainWindow):
         # Results grid signals
         self.results_grid.rejudge_requested.connect(self.rejudge_submission)
         self.results_grid.rejudge_contestant_requested.connect(self.rejudge_contestant)
+    
+    def update_directory_settings(self, contestants_dir, problems_dir):
+        """Update and save directory settings when changed"""
+        # Use the common parent directory as the last directory
+        if contestants_dir and os.path.isdir(contestants_dir):
+            self.settings.last_directory = os.path.dirname(contestants_dir)
+            self.settings.save()
+            print(f"Saved last directory: {self.settings.last_directory}")
     
     def load_data(self):
         """Load contestant and problem data from directories"""
@@ -178,6 +247,16 @@ class MainWindow(QMainWindow):
             print(f"\n{status_msg}")
             self.statusBar().showMessage(status_msg)
             
+            # After successful loading, save the directory as last_directory
+            if os.path.isdir(contestants_dir):
+                self.settings.last_directory = os.path.dirname(contestants_dir)
+                self.settings.save()
+                print(f"Saved last directory: {self.settings.last_directory}")
+            
+            # After loading problems, refresh the settings panel's problem list
+            if hasattr(self, 'settings_panel'):
+                self.settings_panel.refresh_problem_list()
+            
         except Exception as e:
             error_msg = f"Error loading data: {str(e)}"
             print(f"\nERROR: {error_msg}")
@@ -188,6 +267,9 @@ class MainWindow(QMainWindow):
         """Start the evaluation process"""
         if not self.contestants or not self.problems:
             return
+        
+        # Reset results for any tasks that will be evaluated
+        self.reset_pending_results()
         
         # Update UI state
         self.eval_toolbar.evaluate_button.setEnabled(False)
@@ -205,6 +287,9 @@ class MainWindow(QMainWindow):
         self.progress_panel.setup_threads(thread_count)
         self.tab_widget.setCurrentWidget(self.progress_panel)  # Switch to progress tab
         
+        # Reset evaluator state
+        self.evaluator.reset()
+        
         # Start evaluation thread
         self.evaluation_thread = EvaluationThread(
             self.evaluator,
@@ -215,6 +300,7 @@ class MainWindow(QMainWindow):
         )
         
         self.evaluation_thread.result_ready.connect(self.handle_result)
+        self.evaluation_thread.partial_result_ready.connect(self.handle_partial_result)
         self.evaluation_thread.test_case_ready.connect(self.handle_test_case)
         self.evaluation_thread.evaluation_finished.connect(self.evaluation_finished)
         
@@ -226,34 +312,62 @@ class MainWindow(QMainWindow):
         self.evaluation_thread.start()
         self.statusBar().showMessage("Evaluation started...")
     
+    def reset_pending_results(self):
+        """Reset results for tasks that will be reevaluated"""
+        # This ensures we don't have stale or partial results
+        for contestant in self.contestants:
+            for problem in self.problems:
+                if problem.id in contestant.solutions:
+                    # Mark cell as pending
+                    self.results_grid.reset_result(contestant.id, problem.id)
+    
     @pyqtSlot(str, str, int, int)
     def handle_test_case(self, contestant_id: str, problem_id: str, completed: int, total: int):
         """Handle test case completion update"""
         # Update toolbar progress bar as before
         self.eval_toolbar.progress_bar.update_progress(completed, total)
         
-        # Update progress panel
-        if hasattr(self.evaluator, '_parallel_evaluator'):
-            thread_status = self.evaluator._parallel_evaluator.get_thread_status()
-            
-            # Find which thread is processing this contestant/problem
-            for thread_id, status in thread_status.items():
-                if f"Evaluating {contestant_id}" in status:
-                    self.progress_panel.update_thread_progress(thread_id, completed, total)
-                    break
+        # Update progress panel - Add null check
+        if hasattr(self.evaluator, '_parallel_evaluator') and self.evaluator._parallel_evaluator is not None:
+            try:
+                thread_status = self.evaluator._parallel_evaluator.get_thread_status()
+                
+                # Find which thread is processing this contestant/problem
+                for thread_id, status in thread_status.items():
+                    if f"Evaluating {contestant_id}" in status:
+                        self.progress_panel.update_thread_progress(thread_id, completed, total)
+                        break
+            except Exception as e:
+                print(f"Error updating thread status: {str(e)}")
+        else:
+            # Single-threaded mode, use thread ID 0
+            self.progress_panel.update_thread_progress(0, completed, total)
         
         self.statusBar().showMessage(f"Evaluating {contestant_id}/{problem_id}: Test case {completed}/{total}")
     
-    @pyqtSlot(object)
-    def handle_result(self, result: SubmissionResult):
-        """Handle evaluation result"""
-        self.results_grid.update_result(result)
-        self.debug_panel.add_result(result)
+    @pyqtSlot(object, bool)
+    def handle_partial_result(self, result, is_partial):
+        """Handle partial or complete results from test case execution"""
+        # Update result in grid with partial score
+        self.results_grid.update_partial_result(result, is_partial)
         
-        # Update master progress in progress panel
-        total_tasks = len(self.contestants) * len(self.problems)
-        completed_tasks = len(self.results_grid.results)
-        self.progress_panel.update_master_progress(completed_tasks, total_tasks)
+        # Only add to debug panel if it's a complete result 
+        if not is_partial:
+            self.debug_panel.add_result(result)
+        
+        # Update master progress in progress panel if it's a complete result
+        if not is_partial:
+            total_tasks = len(self.contestants) * len(self.problems)
+            completed_tasks = len(self.results_grid.results)
+            self.progress_panel.update_master_progress(completed_tasks, total_tasks)
+    
+    # We can keep the original handle_result method for backward compatibility
+    @pyqtSlot(object)
+    def handle_result(self, result):
+        """Handle complete evaluation result (called at the end of a submission)"""
+        # This will be called when a full submission is complete
+        # We can forward to the partial handler with is_partial=False
+        self.handle_partial_result(result, False)
     
     @pyqtSlot()
     def evaluation_finished(self):
@@ -261,8 +375,9 @@ class MainWindow(QMainWindow):
         self.eval_toolbar.evaluate_button.setEnabled(True)
         self.dir_browser.load_button.setEnabled(True)
         self.eval_toolbar.stop_button.setEnabled(False)
+        self.eval_toolbar.progress_bar.setVisible(False)
         
-        if hasattr(self, 'debug_thread_timer'):
+        if hasattr(self, 'debug_thread_timer') and self.debug_thread_timer.isActive():
             self.debug_thread_timer.stop()
         
         self.statusBar().showMessage("Evaluation completed")
@@ -277,33 +392,29 @@ class MainWindow(QMainWindow):
             # Show progress in status bar
             self.statusBar().showMessage(f"Rejudging {contestant.id}/{problem.id}...")
             
-            # Set up progress tracking
-            total_test_cases = len(problem.test_cases) if problem.test_cases else 0
-            if total_test_cases > 0:
-                self.eval_toolbar.progress_bar.setVisible(True)
-                self.eval_toolbar.progress_bar.update_progress(0, total_test_cases)
+            # Disable relevant UI elements
+            self.eval_toolbar.evaluate_button.setEnabled(False)
+            self.dir_browser.load_button.setEnabled(False)
+            self.eval_toolbar.stop_button.setEnabled(True)
+            self.eval_toolbar.progress_bar.setVisible(True)
+            self.eval_toolbar.progress_bar.setValue(0)
             
-            # Temporarily set test case callback for direct evaluation
-            original_callback = self.evaluator.test_case_callback
-            self.evaluator.test_case_callback = lambda c_id, p_id, comp, tot: \
-                self.eval_toolbar.progress_bar.update_progress(comp, tot)
+            # Create and configure rejudge thread
+            self.rejudge_thread = RejudgeThread(self.evaluator, contestant, problem)
+            self.rejudge_thread.test_case_ready.connect(self.handle_test_case)
+            self.rejudge_thread.result_ready.connect(self.handle_result)
+            self.rejudge_thread.rejudge_finished.connect(self.rejudge_finished)
             
-            # Evaluate submission
-            result = self.evaluator.evaluate_submission(contestant, problem)
+            # Start rejudge thread
+            self.rejudge_thread.start()
             
-            # Restore callback
-            self.evaluator.test_case_callback = original_callback
+            # Show progress panel
+            self.progress_panel.setup_threads(1)
+            self.tab_widget.setCurrentWidget(self.progress_panel)
             
-            # Hide progress bar
-            self.eval_toolbar.progress_bar.setVisible(False)
+            return
             
-            # Update UI with result
-            if result:
-                self.results_grid.update_result(result)
-                self.debug_panel.add_result(result)
-                self.statusBar().showMessage(f"Rejudged {contestant.id}/{problem.id}: {result.status.value}")
-            else:
-                self.statusBar().showMessage(f"Failed to rejudge {contestant.id}/{problem.id}")
+        self.statusBar().showMessage(f"Cannot rejudge: contestant or problem not found")
     
     def rejudge_contestant(self, contestant_id: str):
         """Rejudge all problems for a contestant"""
@@ -323,56 +434,61 @@ class MainWindow(QMainWindow):
         self.progress_panel.setup_threads(1)
         self.tab_widget.setCurrentWidget(self.progress_panel)
         
-        # Evaluate each problem
-        completed = 0
-        for problem in self.problems:
-            if self.eval_toolbar.stop_button.isEnabled():  # Check if we should continue
-                self.statusBar().showMessage(f"Rejudging {contestant.id}/{problem.id}...")
-                self.eval_toolbar.progress_bar.setValue(completed)
-                
-                # Set up test case callback
-                original_callback = self.evaluator.test_case_callback
-                def test_case_progress(c_id, p_id, comp, tot):
-                    # Update both the toolbar and progress panel
-                    self.progress_panel.update_thread_progress(0, comp, tot)
-                    self.statusBar().showMessage(f"Rejudging {c_id}/{p_id}: {comp}/{tot}")
-                
-                self.evaluator.test_case_callback = test_case_progress
-                
-                # Evaluate submission
-                result = self.evaluator.evaluate_submission(contestant, problem)
-                
-                # Restore callback
-                self.evaluator.test_case_callback = original_callback
-                
-                # Update UI
-                if result:
-                    self.results_grid.update_result(result)
-                    self.debug_panel.add_result(result)
-                
-                completed += 1
-                self.progress_panel.update_master_progress(completed, len(self.problems))
+        # Create and configure rejudge thread
+        self.rejudge_thread = RejudgeThread(self.evaluator, contestant, problems=self.problems)
+        self.rejudge_thread.test_case_ready.connect(self.handle_test_case)
+        self.rejudge_thread.result_ready.connect(self.handle_result)
+        self.rejudge_thread.progress_update.connect(self.handle_rejudge_progress)
+        self.rejudge_thread.rejudge_finished.connect(self.rejudge_finished)
         
+        # Start rejudge thread
+        self.rejudge_thread.start()
+    
+    @pyqtSlot(int, int)
+    def handle_rejudge_progress(self, current, total):
+        """Handle rejudge overall progress updates"""
+        self.eval_toolbar.progress_bar.setMaximum(total)
+        self.eval_toolbar.progress_bar.setValue(current)
+        self.progress_panel.update_master_progress(current, total)
+        
+    @pyqtSlot()
+    def rejudge_finished(self):
+        """Handle completion of rejudging"""
         # Reset UI state
         self.eval_toolbar.evaluate_button.setEnabled(True)
         self.dir_browser.load_button.setEnabled(True)
         self.eval_toolbar.stop_button.setEnabled(False)
         self.eval_toolbar.progress_bar.setVisible(False)
         
-        self.statusBar().showMessage(f"Rejudged all problems for {contestant.id}")
-
+        self.statusBar().showMessage("Rejudging completed")
+        
     def stop_evaluation(self):
         """Stop the current evaluation"""
         if self.evaluation_thread and self.evaluation_thread.isRunning():
+            # Stop evaluation thread
             self.evaluation_thread.stop()
-            self.statusBar().showMessage("Evaluation stopped")
+        
+        # Also stop rejudge thread if running
+        if hasattr(self, 'rejudge_thread') and self.rejudge_thread.isRunning():
+            self.rejudge_thread.stop()
+            
+        # Reset UI state
+        self.eval_toolbar.evaluate_button.setEnabled(True)
+        self.dir_browser.load_button.setEnabled(True)
+        self.eval_toolbar.stop_button.setEnabled(False)
+        self.eval_toolbar.progress_bar.setVisible(False)
+        
+        self.statusBar().showMessage("Evaluation stopped")
     
     def update_debug_thread_status(self):
         """Update thread status in debug panel"""
-        if hasattr(self.evaluator, '_parallel_evaluator'):
-            thread_status = self.evaluator._parallel_evaluator.get_thread_status()
-            self.debug_panel.update_thread_status(thread_status)
-            self.progress_panel.update_thread_status(thread_status)  # Add this line
+        if hasattr(self.evaluator, '_parallel_evaluator') and self.evaluator._parallel_evaluator is not None:
+            try:
+                thread_status = self.evaluator._parallel_evaluator.get_thread_status()
+                self.debug_panel.update_thread_status(thread_status)
+                self.progress_panel.update_thread_status(thread_status)  # Add this line
+            except Exception as e:
+                print(f"Error updating debug thread status: {str(e)}")
     
     def export_results(self):
         """Export results to Excel file"""
@@ -496,8 +612,44 @@ class MainWindow(QMainWindow):
         """Handle window close event"""
         if self.evaluation_thread and self.evaluation_thread.isRunning():
             self.evaluation_thread.stop()
+            
+        # Also stop rejudge thread if running
+        if hasattr(self, 'rejudge_thread') and self.rejudge_thread.isRunning():
+            self.rejudge_thread.stop()
         
+        # Save all current settings
         self.settings.thread_count = self.eval_toolbar.thread_count_spinner.value()
+        
+        # Update last_directory if available
+        contestants_dir = self.dir_browser.contestants_dir_edit.text()
+        if contestants_dir and os.path.isdir(contestants_dir):
+            self.settings.last_directory = os.path.dirname(contestants_dir)
+            
+        # Save settings to disk
         self.settings.save()
+        print("Settings saved on application close")
         
         event.accept()
+    
+    def on_closing(self):
+        """Proper cleanup when closing"""
+        if self.evaluation_thread and self.evaluation_thread.isRunning():
+            self.evaluation_thread.stop()
+        self.settings.thread_count = self.eval_toolbar.thread_count_spinner.value()
+        self.settings.save()
+        self.close()
+    
+    def resource_path(self, relative_path):
+        """Get absolute path to resource, works for dev and for PyInstaller"""
+        try:
+            base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+            return os.path.join(base_path, relative_path)
+        except Exception as e:
+            print(f"Error in resource_path: {e}")
+            return relative_path
+    
+    def on_tab_changed(self, index):
+        """Handle tab change event"""
+        # If switching to settings tab, refresh problem settings
+        if index == 2:  # Assuming settings is tab index 2
+            QTimer.singleShot(100, self.settings_panel.load_problem_settings)

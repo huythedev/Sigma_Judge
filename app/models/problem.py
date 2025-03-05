@@ -49,14 +49,23 @@ class Problem:
                 input_file = None
                 output_file = None
                 
-                # Pattern 1: ProblemID.INP/OUT
+                # Priority 1: Standard competition format: ProblemID.INP/OUT
                 pattern1_in = os.path.join(test_dir, f"{self.id}.INP")
                 pattern1_out = os.path.join(test_dir, f"{self.id}.OUT")
                 if os.path.exists(pattern1_in) and os.path.exists(pattern1_out):
                     input_file = pattern1_in
                     output_file = pattern1_out
                 
-                # Pattern 2: input.txt/output.txt
+                # Also check case-insensitive versions
+                if not input_file or not output_file:
+                    for file in os.listdir(test_dir):
+                        file_path = os.path.join(test_dir, file)
+                        if file.upper() == f"{self.id}.INP" and not input_file:
+                            input_file = file_path
+                        elif file.upper() == f"{self.id}.OUT" and not output_file:
+                            output_file = file_path
+                
+                # Pattern 2: input.txt/output.txt (fallback)
                 if not input_file or not output_file:
                     pattern2_in = os.path.join(test_dir, "input.txt")
                     pattern2_out = os.path.join(test_dir, "output.txt")

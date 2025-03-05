@@ -14,6 +14,18 @@ class ResultsGrid(QWidget):
     rejudge_requested = pyqtSignal(str, str)  # contestant_id, problem_id
     rejudge_contestant_requested = pyqtSignal(str)  # contestant_id
     
+    # Status colors
+    STATUS_COLORS = {
+        SubmissionStatus.CORRECT: QColor(200, 230, 201),  # Light green
+        SubmissionStatus.WRONG_ANSWER: QColor(255, 205, 210),  # Light red
+        SubmissionStatus.RUNTIME_ERROR: QColor(255, 236, 179),  # Light orange
+        SubmissionStatus.TIME_LIMIT_EXCEEDED: QColor(209, 196, 233),  # Light purple
+        SubmissionStatus.MEMORY_LIMIT_EXCEEDED: QColor(187, 222, 251),  # Light blue
+        SubmissionStatus.COMPILATION_ERROR: QColor(255, 138, 101),  # Dark orange
+        "PENDING": QColor(224, 224, 224),  # Light gray
+        "RESET": QColor(255, 255, 255),  # White
+    }
+    
     def __init__(self):
         super().__init__()
         self.init_ui()
@@ -73,7 +85,11 @@ class ResultsGrid(QWidget):
         self.status_label.setText(f"{len(contestants)} contestants, {len(problems)} problems")
     
     def update_result(self, result: SubmissionResult):
-        """Update the grid with a new result"""
+        """Update the grid with a complete result"""
+        self.update_partial_result(result, False)
+    
+    def update_partial_result(self, result: SubmissionResult, is_partial: bool):
+        """Update the grid with a partial or complete result"""
         # Find the row and column
         contestant_idx = -1
         for i, contestant in enumerate(self.contestants):
@@ -90,8 +106,10 @@ class ResultsGrid(QWidget):
         if contestant_idx == -1 or problem_idx == -1:
             return
         
-        # Store the result
-        self.results[(result.contestant_id, result.problem_id)] = result
+        # Only store the result in our results dictionary if it's a complete result
+        # This prevents partial results from being considered as complete
+        if not is_partial:
+            self.results[(result.contestant_id, result.problem_id)] = result
         
         # Update the cell
         cell = self.table.item(contestant_idx, problem_idx + 1)
@@ -99,16 +117,13 @@ class ResultsGrid(QWidget):
             cell = QTableWidgetItem()
             self.table.setItem(contestant_idx, problem_idx + 1, cell)
         
-        # Set score text - Add more debug information
+        # Set score text with partial indicator if needed
         if not result.test_case_results or result.status == SubmissionStatus.PENDING:
             cell.setText("N/A")
             print(f"Warning: Empty or PENDING result for {result.contestant_id}/{result.problem_id}")
-            if not result.test_case_results:
-                print("  No test case results")
-            if result.status == SubmissionStatus.PENDING:
-                print("  Status is PENDING")
         else:
-            cell.setText(f"{result.score:.1f}/{result.max_score:.1f}")
+            prefix = "*" if is_partial else ""
+            cell.setText(f"{prefix}{result.score:.1f}/{result.max_score:.1f}")
         
         # Color code by status
         if result.status == SubmissionStatus.CORRECT:
@@ -125,8 +140,143 @@ class ResultsGrid(QWidget):
             cell.setBackground(QBrush(QColor("#ff8a65")))  # Darker orange
         else:
             cell.setBackground(QBrush(QColor("#f0f0f0")))  # Light gray
+            
+        # For partial results, make the background slightly lighter
+        if is_partial:
+            # Get the current background color and make it lighter
+            bg_color = cell.background().color()
+            lighter_color = QColor(
+                min(255, bg_color.red() + 20),
+                min(255, bg_color.green() + 20),
+                min(255, bg_color.blue() + 20)
+            )
+            cell.setBackground(QBrush(lighter_color))
         
-        cell.setToolTip(f"Status: {result.status.value}\nTime: {result.execution_time:.3f}s\nMemory: {result.memory_used:.2f}MB")
+        # Update tooltip
+        status_text = "Partial " if is_partial else ""
+        status_text += result.status.value
+        cell.setToolTip(f"Status: {status_text}\nTime: {result.execution_time:.3f}s\nMemory: {result.memory_used:.2f}MB")
+
+    def reset_result(self, contestant_id, problem_id):
+        """Reset a cell to pending state"""
+        # Find row and column for this result
+        contestant_idx = -1
+        for i, contestant in enumerate(self.contestants):
+            if contestant.id == contestant_id:
+                contestant_idx = i
+                break
+                
+        problem_idx = -1
+        for j, problem in enumerate(self.problems):
+            if problem.id == problem_id:
+                problem_idx = j
+                break
+        
+        if contestant_idx == -1 or problem_idx == -1:
+            return
+            
+        # Remove from results if exists
+        if (contestant_id, problem_id) in self.results:
+            del self.results[(contestant_id, problem_id)]
+            
+        # Create empty cell with "Pending" text
+        cell = QTableWidgetItem("Pending")
+        cell.setBackground(QBrush(self.STATUS_COLORS["PENDING"]))
+        cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.table.setItem(contestant_idx, problem_idx + 1, cell)
+    
+    def reset_all_results(self):
+        """Reset all results"""
+        self.results = {}
+        self.setup_grid(self.contestants, self.problems)
+    
+    def update_result_cell(self, contestant_idx, problem_idx, result):
+        """Update a cell with the evaluation result"""
+        # Format text based on result
+        if result.status == SubmissionStatus.CORRECT:
+            if result.max_score == 100:
+                text = "100"  # Simplified display for correct solutions with full score
+            else:
+                text = f"{result.score}/{result.max_score}"
+        else:
+            text = result.status.value
+            
+        # Create and format table item
+        item = QTableWidgetItem(text)
+        item.setBackground(QBrush(self.STATUS_COLORS.get(result.status, QColor(255, 255, 255))))
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+        # Store result data in item for context menu access
+        item.setData(Qt.ItemDataRole.UserRole, {
+            "contestant_id": result.contestant_id,
+            "problem_id": result.problem_id,
+            "status": result.status,
+            "score": result.score,
+            "time": result.execution_time,
+        })
+        
+        # Update the cell
+        self.table.setItem(contestant_idx, problem_idx + 1, item)
+    
+    def update_contestant_total(self, contestant_idx):
+        """Update the total score for a contestant"""
+        contestant = self.contestants[contestant_idx]
+        
+        total_score = 0
+        total_max = 0
+        
+        # Sum scores for all problems
+        for j, problem in enumerate(self.problems):
+            result = self.results.get((contestant.id, problem.id))
+            if result:
+                total_score += result.score
+                total_max += result.max_score
+        
+        # Create total cell
+        if total_max > 0:
+            total_text = f"{total_score}/{total_max}"
+        else:
+            total_text = "0/0"
+            
+        item = QTableWidgetItem(total_text)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        bold_font = QFont()
+        bold_font.setBold(True)
+        item.setFont(bold_font)
+        
+        # Update the total cell (last column)
+        self.table.setItem(contestant_idx, len(self.problems) + 1, item)
+    
+    def update_problem_total(self, problem_idx):
+        """Update the total score for a problem"""
+        problem = self.problems[problem_idx]
+        
+        correct_count = 0
+        total_count = 0
+        
+        # Count correct solutions
+        for i, contestant in enumerate(self.contestants):
+            result = self.results.get((contestant.id, problem.id))
+            if result:
+                total_count += 1
+                if result.status == SubmissionStatus.CORRECT:
+                    correct_count += 1
+        
+        # Create total cell
+        if total_count > 0:
+            percentage = int((correct_count / total_count) * 100)
+            total_text = f"{correct_count}/{total_count} ({percentage}%)"
+        else:
+            total_text = "0/0 (0%)"
+            
+        item = QTableWidgetItem(total_text)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        bold_font = QFont()
+        bold_font.setBold(True)
+        item.setFont(bold_font)
+        
+        # Update the total cell (last row)
+        self.table.setItem(len(self.contestants), problem_idx, item)
     
     def show_context_menu(self, pos):
         """Show context menu at the given position"""
