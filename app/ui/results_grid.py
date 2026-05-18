@@ -302,13 +302,16 @@ class ResultsGrid(QWidget):
             problem = self.problems[col - 1]
             result = self.results.get((contestant.id, problem.id))
             
+            menu = QMenu(self)
             if result:
-                menu = QMenu(self)
                 menu.addAction("Show Details", 
                             lambda: self.show_details(row, col))
-                menu.addAction("Rejudge Problem", 
-                            lambda: self.rejudge_requested.emit(contestant.id, problem.id))
-                menu.exec(self.table.mapToGlobal(pos))
+            else:
+                details_action = menu.addAction("Show Details")
+                details_action.setEnabled(False)
+            menu.addAction("Rejudge Problem", 
+                        lambda: self.rejudge_requested.emit(contestant.id, problem.id))
+            menu.exec(self.table.mapToGlobal(pos))
 
     def show_details(self, row, col):
         """Show detailed result dialog when a cell is double-clicked"""

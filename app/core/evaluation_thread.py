@@ -6,6 +6,7 @@ import traceback
 from app.models.contestant import Contestant
 from app.models.problem import Problem
 from app.models.submission import SubmissionResult
+from app.core.modules.process_manager import ProcessManager
 
 class EvaluationThread(QThread):
     result_ready = pyqtSignal(object)  # SubmissionResult
@@ -89,6 +90,7 @@ class EvaluationThread(QThread):
         finally:
             # Cleanup
             self.evaluator.cleanup()
+            ProcessManager.wait_for_all_processes()
             self.evaluation_finished.emit()
     
     def _result_callback(self, result):

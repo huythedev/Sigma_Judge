@@ -32,7 +32,7 @@ class SubmissionResult:
     memory_used: float = 0.0
     test_case_results: List[TestCaseResult] = field(default_factory=list)
     
-    def calculate_score(self, weights: List[float] = None):
+    def calculate_score(self, weights: List[float] = None, total_points: float = None, total_weight_override: float = None):
         """Calculate the score based on test case results"""
         if not self.test_case_results:
             self.status = SubmissionStatus.PENDING
@@ -44,12 +44,20 @@ class SubmissionResult:
         if weights is None or len(weights) != len(self.test_case_results):
             weights = [1.0] * len(self.test_case_results)
         
-        # Sum up weights for max score
-        self.max_score = sum(weights)
+        total_weight = sum(weights)
+        if total_weight_override is not None and total_weight_override > 0:
+            total_weight = total_weight_override
         
         # Calculate score based on correct test cases
-        self.score = sum(weights[i] for i, tc in enumerate(self.test_case_results) 
-                        if tc.status == SubmissionStatus.CORRECT)
+        correct_weight = sum(weights[i] for i, tc in enumerate(self.test_case_results) 
+                             if tc.status == SubmissionStatus.CORRECT)
+
+        if total_points is not None:
+            self.max_score = total_points
+            self.score = (correct_weight / total_weight) * total_points if total_weight > 0 else 0.0
+        else:
+            self.max_score = total_weight
+            self.score = correct_weight
         
         # Calculate average execution time and max memory
         if self.test_case_results:

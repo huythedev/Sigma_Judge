@@ -277,6 +277,13 @@ class MainWindow(QMainWindow):
         self.eval_toolbar.stop_button.setEnabled(True)
         self.eval_toolbar.progress_bar.setVisible(True)
         self.eval_toolbar.progress_bar.setValue(0)
+
+        # Track total tasks based on available solutions
+        self.total_tasks = 0
+        for contestant in self.contestants:
+            for problem in self.problems:
+                if problem.id in contestant.solutions:
+                    self.total_tasks += 1
         
         # Setup progress panel
         thread_count = self.eval_toolbar.thread_count_spinner.value()
@@ -286,6 +293,7 @@ class MainWindow(QMainWindow):
         
         self.progress_panel.setup_threads(thread_count)
         self.tab_widget.setCurrentWidget(self.progress_panel)  # Switch to progress tab
+        self.progress_panel.update_master_progress(0, self.total_tasks)
         
         # Reset evaluator state
         self.evaluator.reset()
@@ -325,7 +333,8 @@ class MainWindow(QMainWindow):
     def handle_test_case(self, contestant_id: str, problem_id: str, completed: int, total: int):
         """Handle test case completion update"""
         # Update toolbar progress bar as before
-        self.eval_toolbar.progress_bar.update_progress(completed, total)
+        label = f"{contestant_id}/{problem_id}/%v/%m"
+        self.eval_toolbar.progress_bar.update_progress_with_label(completed, total, label)
         
         # Update progress panel - Add null check
         if hasattr(self.evaluator, '_parallel_evaluator') and self.evaluator._parallel_evaluator is not None:
@@ -334,14 +343,17 @@ class MainWindow(QMainWindow):
                 
                 # Find which thread is processing this contestant/problem
                 for thread_id, status in thread_status.items():
-                    if f"Evaluating {contestant_id}" in status:
-                        self.progress_panel.update_thread_progress(thread_id, completed, total)
+                    if f"Evaluating {contestant_id}/{problem_id}" in status:
+                        self.progress_panel.update_thread_progress(thread_id, completed, total, problem_id, contestant_id)
+                        break
+                    if f"Evaluating {contestant_id} - {problem_id}" in status:
+                        self.progress_panel.update_thread_progress(thread_id, completed, total, problem_id, contestant_id)
                         break
             except Exception as e:
                 print(f"Error updating thread status: {str(e)}")
         else:
             # Single-threaded mode, use thread ID 0
-            self.progress_panel.update_thread_progress(0, completed, total)
+            self.progress_panel.update_thread_progress(0, completed, total, problem_id, contestant_id)
         
         self.statusBar().showMessage(f"Evaluating {contestant_id}/{problem_id}: Test case {completed}/{total}")
     
@@ -357,7 +369,7 @@ class MainWindow(QMainWindow):
         
         # Update master progress in progress panel if it's a complete result
         if not is_partial:
-            total_tasks = len(self.contestants) * len(self.problems)
+            total_tasks = getattr(self, 'total_tasks', len(self.contestants) * len(self.problems))
             completed_tasks = len(self.results_grid.results)
             self.progress_panel.update_master_progress(completed_tasks, total_tasks)
     
@@ -538,9 +550,6 @@ class MainWindow(QMainWindow):
                                 'Status': tc_result.status.value,
                                 'Time (s)': tc_result.execution_time,
                                 'Memory (MB)': tc_result.memory_used,
-                                'Input': tc_result.input_excerpt,
-                                'Expected': tc_result.expected_output,
-                                'Actual': tc_result.actual_output,
                                 'Error': tc_result.error_message
                             })
             

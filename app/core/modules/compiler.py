@@ -24,6 +24,14 @@ class Compiler:
             executable_path += '.exe'
         
         try:
+            creationflags = 0
+            startupinfo = None
+            if platform.system() == 'Windows':
+                creationflags = subprocess.CREATE_NO_WINDOW
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
             if ext == '.c':
                 # Use platform-appropriate compiler flags
                 compile_cmd = ['gcc', solution_path, '-o', executable_path]
@@ -32,7 +40,9 @@ class Compiler:
                 
                 process = subprocess.run(
                     compile_cmd,
-                    capture_output=True, text=True
+                    capture_output=True, text=True,
+                    creationflags=creationflags,
+                    startupinfo=startupinfo
                 )
             elif ext == '.cpp':
                 compile_cmd = ['g++', '-std=c++20', solution_path, '-o', executable_path]
@@ -41,7 +51,9 @@ class Compiler:
                 
                 process = subprocess.run(
                     compile_cmd,
-                    capture_output=True, text=True
+                    capture_output=True, text=True,
+                    creationflags=creationflags,
+                    startupinfo=startupinfo
                 )
             else:
                 # No compilation needed

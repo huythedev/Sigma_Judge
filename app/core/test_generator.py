@@ -137,11 +137,21 @@ class TestGenerator:
                     cmd = [solution_path]
                 
                 try:
+                    creationflags = 0
+                    startupinfo = None
+                    if os.name == "nt":
+                        creationflags = subprocess.CREATE_NO_WINDOW
+                        startupinfo = subprocess.STARTUPINFO()
+                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        startupinfo.wShowWindow = subprocess.SW_HIDE
+
                     process = subprocess.run(
                         cmd,
                         input=input_data,
                         text=True,
-                        capture_output=True
+                        capture_output=True,
+                        creationflags=creationflags,
+                        startupinfo=startupinfo
                     )
                     
                     if process.returncode == 0:

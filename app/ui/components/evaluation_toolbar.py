@@ -29,6 +29,14 @@ class TestCaseProgressBar(QProgressBar):
         # Force immediate update
         self.update()
 
+    def update_progress_with_label(self, current: int, total: int, label: str = None):
+        """Update progress and optionally set a custom label format"""
+        if label:
+            self.setFormat(label)
+        else:
+            self.setFormat("Test Case %v/%m")
+        self.update_progress(current, total)
+
 class EvaluationToolbar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)

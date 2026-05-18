@@ -82,8 +82,8 @@ class TestRunner:
                     execution_time=settings.time_limit,
                     memory_used=max_memory,
                     error_message="Time limit exceeded",
-                    input_excerpt=input_data[:100] + "..." if len(input_data) > 100 else input_data,
-                    expected_output=expected_output[:100] + "..." if len(expected_output) > 100 else expected_output,
+                    input_excerpt=input_data,
+                    expected_output=expected_output,
                     actual_output=""
                 )
             
@@ -99,9 +99,9 @@ class TestRunner:
                     execution_time=execution_time,
                     memory_used=max_memory,
                     error_message="Memory limit exceeded",
-                    input_excerpt=input_data[:100] + "..." if len(input_data) > 100 else input_data,
-                    expected_output=expected_output[:100] + "..." if len(expected_output) > 100 else expected_output,
-                    actual_output=actual_output[:100] + "..." if len(actual_output) > 100 else actual_output
+                    input_excerpt=input_data,
+                    expected_output=expected_output,
+                    actual_output=actual_output
                 )
             
             # Check for runtime error
@@ -111,9 +111,9 @@ class TestRunner:
                     execution_time=execution_time,
                     memory_used=max_memory,
                     error_message=stderr,
-                    input_excerpt=input_data[:100] + "..." if len(input_data) > 100 else input_data,
-                    expected_output=expected_output[:100] + "..." if len(expected_output) > 100 else expected_output,
-                    actual_output=actual_output[:100] + "..." if len(actual_output) > 100 else actual_output
+                    input_excerpt=input_data,
+                    expected_output=expected_output,
+                    actual_output=actual_output
                 )
             
             # Check output correctness
@@ -122,18 +122,18 @@ class TestRunner:
                     status=SubmissionStatus.CORRECT,
                     execution_time=execution_time,
                     memory_used=max_memory,
-                    input_excerpt=input_data[:100] + "..." if len(input_data) > 100 else input_data,
-                    expected_output=expected_output[:100] + "..." if len(expected_output) > 100 else expected_output,
-                    actual_output=actual_output[:100] + "..." if len(actual_output) > 100 else actual_output
+                    input_excerpt=input_data,
+                    expected_output=expected_output,
+                    actual_output=actual_output
                 )
             else:
                 return TestCaseResult(
                     status=SubmissionStatus.WRONG_ANSWER,
                     execution_time=execution_time,
                     memory_used=max_memory,
-                    input_excerpt=input_data[:100] + "..." if len(input_data) > 100 else input_data,
-                    expected_output=expected_output[:100] + "..." if len(expected_output) > 100 else expected_output,
-                    actual_output=actual_output[:100] + "..." if len(actual_output) > 100 else actual_output
+                    input_excerpt=input_data,
+                    expected_output=expected_output,
+                    actual_output=actual_output
                 )
         
         except Exception as e:
@@ -169,7 +169,7 @@ class TestRunner:
     def _check_io_compatibility(io_details: dict, io_mode: str) -> bool:
         """Check if IO details are compatible with the specified IO mode"""
         # Extract information from io_details
-        uses_file_io = bool(io_details.get('input'))
+        uses_file_io = bool(io_details.get('input') or io_details.get('output'))
         is_adaptive = io_details.get('adaptive', False)
         
         # Adaptive programs are always compatible (they can adjust)
@@ -187,7 +187,7 @@ class TestRunner:
     @staticmethod
     def _get_incompatibility_error(io_details: dict, io_mode: str) -> str:
         """Get error message for incompatible IO mode"""
-        uses_file_io = bool(io_details.get('input'))
+        uses_file_io = bool(io_details.get('input') or io_details.get('output'))
         io_methods = io_details.get('methods', [])
         input_file_name = io_details.get('input')
         output_file_name = io_details.get('output')
@@ -227,7 +227,7 @@ class TestRunner:
         }
         
         # Extract information
-        uses_file_io = bool(io_details.get('input'))
+        uses_file_io = bool(io_details.get('input') or io_details.get('output'))
         input_file_name = io_details.get('input')
         output_file_name = io_details.get('output')
         io_methods = io_details.get('methods', [])
@@ -273,6 +273,8 @@ class TestRunner:
             print(f"Using standard IO mode (pipe stdin)")
             
         elif io_mode == "file" or (io_mode == "auto" and uses_file_io):
+            if not input_file_name:
+                input_file_name = "input.txt"
             # Create the input file
             temp_in_path = os.path.join(solution_dir, input_file_name)
             with open(temp_in_path, 'w') as f:

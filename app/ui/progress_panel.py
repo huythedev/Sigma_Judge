@@ -86,7 +86,7 @@ class ProgressPanel(QWidget):
                     if subitem.widget():
                         subitem.widget().deleteLater()
     
-    def update_thread_progress(self, thread_id: int, current: int, total: int):
+    def update_thread_progress(self, thread_id: int, current: int, total: int, problem_id: str = None, contestant_id: str = None):
         """Update progress for a specific thread"""
         # Add debug output
         print(f"Updating thread {thread_id} progress: {current}/{total}")
@@ -96,8 +96,15 @@ class ProgressPanel(QWidget):
             if total <= 0:
                 total = 1
                 
-            self.thread_bars[thread_id].setMaximum(total)
-            self.thread_bars[thread_id].setValue(current)
+            progress_bar = self.thread_bars[thread_id]
+            progress_bar.setMaximum(total)
+            progress_bar.setValue(current)
+            if problem_id and contestant_id:
+                progress_bar.setFormat(f"{contestant_id}/{problem_id}/%v/%m")
+            elif problem_id:
+                progress_bar.setFormat(f"{problem_id}/%v/%m")
+            else:
+                progress_bar.setFormat("%v/%m - %p%")
     
     def update_thread_status(self, thread_statuses: dict):
         """Update status text for threads"""
@@ -106,8 +113,12 @@ class ProgressPanel(QWidget):
                 # Extract contestant and problem IDs if available
                 if "Evaluating" in status:
                     try:
-                        contestant_id, problem_id = status.split(" - ")[1].split(" - ")
-                        self.thread_bars[thread_id].setToolTip(f"Evaluating {contestant_id} - {problem_id}")
+                        if "/" in status:
+                            contestant_id, problem_id = status.split("Evaluating ")[1].split("/")
+                            self.thread_bars[thread_id].setToolTip(f"Evaluating {contestant_id} - {problem_id}")
+                        else:
+                            contestant_id, problem_id = status.split(" - ")[1].split(" - ")
+                            self.thread_bars[thread_id].setToolTip(f"Evaluating {contestant_id} - {problem_id}")
                     except:
                         self.thread_bars[thread_id].setToolTip(status)
                 else:

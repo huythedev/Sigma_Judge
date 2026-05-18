@@ -71,7 +71,8 @@ class Processor:
         # Calculate score
         weights = [tc.weight for tc in problem.test_cases]
         if result.test_case_results:
-            result.calculate_score(weights)
+            problem_points = getattr(problem_settings, 'points', 100.0)
+            result.calculate_score(weights, total_points=problem_points, total_weight_override=sum(weights))
         else:
             result.status = SubmissionStatus.PENDING
         

@@ -24,6 +24,7 @@ from app.core.parallel_evaluator import ParallelEvaluator
 from app.core.modules.compiler import Compiler
 from app.core.modules.file_io_detector import FileIODetector
 from app.core.modules.test_runner import TestRunner
+from app.core.modules.process_manager import ProcessManager
 
 class Evaluator:
     def __init__(self, settings: Settings):
@@ -41,6 +42,7 @@ class Evaluator:
                 process.kill()
             except:
                 pass
+        ProcessManager.kill_all_processes()
     
     def reset(self):
         """Reset the evaluator state"""
@@ -150,6 +152,7 @@ class Evaluator:
         
         print(f"Found {len(problem.test_cases)} test cases")
         weights = [tc.weight for tc in problem.test_cases]
+        problem_points = getattr(problem_settings, 'points', 100.0)
         
         # Compile if needed - using Compiler module
         if solution_path.endswith('.c') or solution_path.endswith('.cpp'):
@@ -187,12 +190,16 @@ class Evaluator:
             # Calculate partial score and report after each test case
             if partial_result_callback and len(result.test_case_results) > 0:
                 partial_weights = [tc.weight for tc in problem.test_cases[:i+1]]
-                result.calculate_score(partial_weights)
+                result.calculate_score(
+                    partial_weights,
+                    total_points=problem_points,
+                    total_weight_override=sum(weights)
+                )
                 partial_result_callback(result, is_partial=True)
         
         # Make sure we have test cases and calculate final score
         if len(result.test_case_results) > 0:
-            result.calculate_score(weights)
+            result.calculate_score(weights, total_points=problem_points, total_weight_override=sum(weights))
             print(f"Final status for {contestant.id}/{problem.id}: {result.status.value} (Score: {result.score}/{result.max_score})")
         else:
             result.status = SubmissionStatus.PENDING

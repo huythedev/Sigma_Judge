@@ -81,8 +81,8 @@ class SettingsPanel(QWidget):
         
         # Table for problem settings
         self.problem_table = QTableWidget()
-        self.problem_table.setColumnCount(4)
-        self.problem_table.setHorizontalHeaderLabels(["Problem ID", "Time Limit", "Memory Limit", "I/O Mode"])
+        self.problem_table.setColumnCount(5)
+        self.problem_table.setHorizontalHeaderLabels(["Problem ID", "Time Limit", "Memory Limit", "I/O Mode", "Points"])
         self.problem_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.problem_table.setMinimumHeight(200)
         
@@ -192,6 +192,13 @@ class SettingsPanel(QWidget):
             elif io_mode == "file":
                 io_combo.setCurrentIndex(2)
             self.problem_table.setCellWidget(row, 3, io_combo)
+
+            # Points
+            points_spinner = QDoubleSpinBox()
+            points_spinner.setRange(0.0, 100000.0)
+            points_spinner.setDecimals(2)
+            points_spinner.setValue(getattr(problem_settings, 'points', 100.0))
+            self.problem_table.setCellWidget(row, 4, points_spinner)
         
         # Update column sizes
         self.problem_table.resizeColumnsToContents()
@@ -226,12 +233,14 @@ class SettingsPanel(QWidget):
             memory_limit = self.problem_table.cellWidget(row, 2).value()
             io_mode_idx = self.problem_table.cellWidget(row, 3).currentIndex()
             io_mode = self.get_io_mode_from_index(io_mode_idx)
+            points = self.problem_table.cellWidget(row, 4).value()
             
             # Update problem settings
             self.settings.problem_settings[problem_id] = ProblemSettings(
                 time_limit=time_limit,
                 memory_limit=memory_limit,
-                io_mode=io_mode
+                io_mode=io_mode,
+                points=points
             )
         
         # Apply global settings to all problems if checkbox is checked

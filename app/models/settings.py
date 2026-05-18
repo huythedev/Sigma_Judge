@@ -8,6 +8,7 @@ class ProblemSettings:
     time_limit: float = 1.0  # in seconds
     memory_limit: float = 512.0  # in MB
     io_mode: str = "auto"  # "auto", "standard", or "file"
+    points: float = 100.0
     
     def to_dict(self):
         return asdict(self)
@@ -17,6 +18,8 @@ class ProblemSettings:
         # For backward compatibility with old settings files that don't have io_mode
         if 'io_mode' not in data:
             data['io_mode'] = "auto"
+        if 'points' not in data:
+            data['points'] = 100.0
         return cls(**data)
 
 @dataclass

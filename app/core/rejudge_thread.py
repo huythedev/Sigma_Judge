@@ -70,7 +70,7 @@ class RejudgeThread(QThread):
                 break
                 
             # Update overall progress
-            self.progress_update.emit(idx, total)
+            self.progress_update.emit(idx + 1, total)
             
             # Set callback for this problem
             def test_case_progress(c_id, p_id, comp, tot):

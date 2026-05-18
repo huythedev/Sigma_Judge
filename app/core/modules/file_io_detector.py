@@ -26,6 +26,19 @@ class FileIODetector:
             'adaptive': False         # Flag for programs that adapt to environment
         }
         
+        # Python file I/O detection
+        if solution_path.endswith('.py'):
+            try:
+                with open(solution_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                FileIODetector._detect_python_io(content, result, problem_id)
+                FileIODetector._print_detection_summary(result, solution_path)
+            except Exception as e:
+                print(f"Error detecting Python file I/O: {e}")
+                import traceback
+                traceback.print_exc()
+            return result
+
         # Only check C/C++ files for now
         if not solution_path.endswith(('.c', '.cpp')):
             return result
@@ -100,6 +113,31 @@ class FileIODetector:
             result['conditional_io'] = True
             result['adaptive'] = True
             print("Detected docfile() pattern - program adapts to environment")
+
+    @staticmethod
+    def _detect_python_io(content: str, result: dict, problem_id: str = None):
+        """Detect Python open() file I/O patterns"""
+        open_pattern = r'open\s*\(\s*["\']([^"\']+)["\']\s*(?:,\s*["\']([^"\']+)["\'])?'
+        for match in re.finditer(open_pattern, content):
+            filename = match.group(1)
+            mode = (match.group(2) or 'r').lower()
+
+            if 'r' in mode and not result['input']:
+                result['input'] = filename
+                result['methods'].append('open')
+                result['input_methods'].append('open')
+            if any(flag in mode for flag in ('w', 'a', 'x')) and not result['output']:
+                result['output'] = filename
+                if 'open' not in result['methods']:
+                    result['methods'].append('open')
+                result['output_methods'].append('open')
+
+        # If only one of input/output is found, use problem_id defaults when helpful
+        if problem_id:
+            if not result['input'] and result['output']:
+                result['input'] = f"{problem_id}.INP"
+            if not result['output'] and result['input']:
+                result['output'] = f"{problem_id}.OUT"
     
     @staticmethod
     def _detect_io_methods(content: str) -> dict:
