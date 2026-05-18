@@ -45,9 +45,21 @@ class Compiler:
                     startupinfo=startupinfo
                 )
             elif ext == '.cpp':
-                compile_cmd = ['g++', '-std=c++20', solution_path, '-o', executable_path]
-                if platform.system() != 'Windows':
-                    compile_cmd.append('-lm')
+                compile_cmd = [
+                    'g++',
+                    '-std=c++14',
+                    '-pipe',
+                    '-O2',
+                    '-s',
+                    '-static',
+                    '-lm',
+                    '-x',
+                    'c++',
+                    solution_path,
+                    '-Wl,--stack,66060288',
+                    '-o',
+                    executable_path
+                ]
                 
                 process = subprocess.run(
                     compile_cmd,
